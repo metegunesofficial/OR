@@ -16,27 +16,21 @@ interface ActivityState {
   clearActivities: () => void;
 }
 
+const initialActivities: ActivityLogEntry[] = [
+  {
+    id: "1",
+    action: "System Initialized",
+    user: "System",
+    target: "Application",
+    timestamp: new Date().toISOString(),
+    details: "Application started successfully",
+    severity: "info",
+  },
+];
+
 export const useActivityStore = create<ActivityState>((set) => ({
-  activities: [
-    {
-      id: "1",
-      action: "User Created",
-      user: "Admin",
-      target: "john@hospital.com",
-      timestamp: new Date().toISOString(),
-      details: "New surgeon account created",
-      severity: "info",
-    },
-    {
-      id: "2",
-      action: "Surgery Scheduled",
-      user: "Dr. Smith",
-      target: "OR-1",
-      timestamp: new Date().toISOString(),
-      details: "Scheduled appendectomy for tomorrow",
-      severity: "info",
-    },
-  ],
+  activities: initialActivities,
+
   addActivity: (newActivity) =>
     set((state) => ({
       activities: [
@@ -48,5 +42,6 @@ export const useActivityStore = create<ActivityState>((set) => ({
         ...state.activities,
       ],
     })),
+
   clearActivities: () => set({ activities: [] }),
 }));

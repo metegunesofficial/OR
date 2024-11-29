@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/select";
 import { useUserStore } from "@/lib/store/userStore";
 import { useActivityStore } from "@/lib/store/activityStore";
+import { useRoleStore } from "@/lib/store/roleStore";
 
 const userFormSchema = z
   .object({
@@ -41,10 +42,12 @@ const userFormSchema = z
       .regex(
         /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
         "Password must contain uppercase, lowercase, and number",
-      ),
-    confirmPassword: z.string(),
+      )
+      .optional()
+      .or(z.literal("")),
+    confirmPassword: z.string().optional().or(z.literal("")),
   })
-  .refine((data) => data.password === data.confirmPassword, {
+  .refine((data) => !data.password || data.password === data.confirmPassword, {
     message: "Passwords do not match",
     path: ["confirmPassword"],
   });
@@ -54,25 +57,25 @@ type UserFormValues = z.infer<typeof userFormSchema>;
 interface CreateUserDialogProps {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  defaultValues?: Partial<UserFormValues>;
+  mode?: "create" | "edit";
+  userId?: string;
 }
-
-const roleOptions = [
-  { value: "admin", label: "Administrator" },
-  { value: "surgeon", label: "Surgeon" },
-  { value: "nurse", label: "Nurse" },
-  { value: "staff", label: "Staff Member" },
-];
 
 const CreateUserDialog = ({
   open = false,
   onOpenChange = () => {},
+  defaultValues,
+  mode = "create",
+  userId,
 }: CreateUserDialogProps) => {
-  const { addUser } = useUserStore();
+  const { addUser, updateUser } = useUserStore();
   const { addActivity } = useActivityStore();
+  const { roles } = useRoleStore();
 
   const form = useForm<UserFormValues>({
     resolver: zodResolver(userFormSchema),
-    defaultValues: {
+    defaultValues: defaultValues || {
       name: "",
       email: "",
       role: "",
@@ -82,35 +85,68 @@ const CreateUserDialog = ({
   });
 
   const handleSubmit = (values: UserFormValues) => {
-    addUser({
-      name: values.name,
-      email: values.email,
-      role: values.role,
-      avatarUrl: `https://dummyimage.com/40/4f46e5/ffffff&text=${values.name
-        .split(" ")
-        .map((n) => n[0])
-        .join("")}`,
-    });
+    try {
+      if (mode === "create") {
+        if (!values.password) {
+          form.setError("password", {
+            type: "manual",
+            message: "Password is required for new users",
+          });
+          return;
+        }
 
-    addActivity({
-      action: "User Created",
-      user: "Admin",
-      target: values.email,
-      details: `New user account created for ${values.name}`,
-      severity: "info",
-    });
+        addUser({
+          name: values.name,
+          email: values.email,
+          role: values.role,
+          avatarUrl: `https://dummyimage.com/40/4f46e5/ffffff&text=${values.name
+            .split(" ")
+            .map((n) => n[0])
+            .join("")}`,
+        });
 
-    onOpenChange(false);
-    form.reset();
+        addActivity({
+          action: "User Created",
+          user: "Admin",
+          target: values.email,
+          details: `New user account created for ${values.name}`,
+          severity: "info",
+        });
+      } else if (mode === "edit" && userId) {
+        updateUser(userId, {
+          name: values.name,
+          email: values.email,
+          role: values.role,
+        });
+
+        addActivity({
+          action: "User Updated",
+          user: "Admin",
+          target: values.email,
+          details: `User account updated for ${values.name}`,
+          severity: "info",
+        });
+      }
+
+      onOpenChange(false);
+      form.reset();
+    } catch (error) {
+      console.error("Error submitting form:", error);
+      // Handle error appropriately
+    }
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[600px] bg-background">
         <DialogHeader>
-          <DialogTitle>Create New User</DialogTitle>
+          <DialogTitle>
+            {mode === "create" ? "Create New User" : "Edit User"}
+          </DialogTitle>
           <DialogDescription>
-            Add a new user to the system. Fill in all required fields.
+            {mode === "create"
+              ? "Add a new user to the system. Fill in all required fields."
+              : "Edit user information."}
           </DialogDescription>
         </DialogHeader>
 
@@ -167,9 +203,9 @@ const CreateUserDialog = ({
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {roleOptions.map((role) => (
-                        <SelectItem key={role.value} value={role.value}>
-                          {role.label}
+                      {roles.map((role) => (
+                        <SelectItem key={role.id} value={role.id}>
+                          {role.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -179,33 +215,37 @@ const CreateUserDialog = ({
               )}
             />
 
-            <FormField
-              control={form.control}
-              name="password"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Password</FormLabel>
-                  <FormControl>
-                    <Input type="password" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {mode === "create" && (
+              <>
+                <FormField
+                  control={form.control}
+                  name="password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Password</FormLabel>
+                      <FormControl>
+                        <Input type="password" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-            <FormField
-              control={form.control}
-              name="confirmPassword"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Confirm Password</FormLabel>
-                  <FormControl>
-                    <Input type="password" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+                <FormField
+                  control={form.control}
+                  name="confirmPassword"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Confirm Password</FormLabel>
+                      <FormControl>
+                        <Input type="password" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </>
+            )}
 
             <DialogFooter>
               <Button
@@ -215,7 +255,9 @@ const CreateUserDialog = ({
               >
                 Cancel
               </Button>
-              <Button type="submit">Create User</Button>
+              <Button type="submit">
+                {mode === "create" ? "Create User" : "Save Changes"}
+              </Button>
             </DialogFooter>
           </form>
         </Form>
